@@ -1,0 +1,84 @@
+  #Install packages
+  install.packages("tidyverse")
+  install.packages("skimr")
+  install.packages("janitor")
+  install.packages("here")
+  
+  #Load packages
+  library("tidyverse")
+  library("skimr")
+  library("janitor")
+  library("here")
+  
+  #Import raw data csv
+  raw_data <- read_csv("hospital_resource_raw_08032025.csv")
+  
+  #Inspect raw data
+  colnames(raw_data)
+  skim_without_charts(raw_data)
+  
+  #Filter for Ascension (Regional Cidade Hospital System)
+  rgn_cidade_data <- raw_data[grep("ascension", raw_data$hospital_name, ignore.case = TRUE), ]
+  #Remove noise columns from data: combine vector w/ wanted columns
+  kept_columns <- c(
+    "hospital_pk", "collection_week","geocoded_hospital_address", "hospital_name","total_beds_7_day_avg", "all_adult_hospital_inpatient_beds_7_day_avg",
+    "all_adult_hospital_inpatient_bed_occupied_7_day_avg", "staffed_adult_icu_bed_occupancy_7_day_avg", "previous_day_total_ED_visits_7_day_sum"
+  )
+  rgn_cidade_data <- rgn_cidade_data[kept_columns]
+  
+  #Inspect new tibble
+  head(rgn_cidade_data)
+  clean_names(rgn_cidade_data)
+  skim_without_charts(rgn_cidade_data)
+  
+  #Drop null rows
+  rgn_cidade_data <- rgn_cidade_data[
+    !is.na(rgn_cidade_data$total_beds_7_day_avg) &
+    !is.na(rgn_cidade_data$all_adult_hospital_inpatient_bed_occupied_7_day_avg) &
+    !is.na(rgn_cidade_data$all_adult_hospital_inpatient_beds_7_day_avg) &
+    !is.na(rgn_cidade_data$staffed_adult_icu_bed_occupancy_7_day_avg) &
+    !is.na(rgn_cidade_data$previous_day_total_ED_visits_7_day_sum), 
+    ]
+
+  #Create adult inpatient occupancy column
+  rgn_cidade_data <- rgn_cidade_data %>%
+    mutate(
+      all_adult_hospital_inpatient_bed_occupancy_7_day_avg = round(all_adult_hospital_inpatient_bed_occupied_7_day_avg /
+                                                                     all_adult_hospital_inpatient_beds_7_day_avg, 3)) %>%
+    select(-all_adult_hospital_inpatient_bed_occupied_7_day_avg, -all_adult_hospital_inpatient_beds_7_day_avg)
+  nrow(rgn_cidade_data)
+  
+  #ensure both occupancy variables have same # decimals
+  rgn_cidade_data <- rgn_cidade_data %>%
+    mutate(staffed_adult_icu_bed_occupancy_7_day_avg = staffed_adult_icu_bed_occupancy_7_day_avg / 100)
+  #remove rows with -99999 and 0.0 null values
+  rgn_cidade_data <- rgn_cidade_data %>%
+    filter(
+      all_adult_hospital_inpatient_bed_occupancy_7_day_avg > 0.009,
+      staffed_adult_icu_bed_occupancy_7_day_avg > 0.009
+    )
+  #Remove outliers from occupancy 
+  rgn_cidade_data <- rgn_cidade_data %>%
+    filter(
+      all_adult_hospital_inpatient_bed_occupancy_7_day_avg <= 3.25,
+      staffed_adult_icu_bed_occupancy_7_day_avg <= 3.25
+    )
+  
+  #Clean hospital names
+  rgn_cidade_data$hospital_name <- tolower(rgn_cidade_data$hospital_name)
+  
+  #Convert variable data types
+  
+  #hospital primary key (char to numeric)
+  rgn_cidade_data$hospital_pk <- as.numeric(rgn_cidade_data$hospital_pk)
+  
+  #extract lat/long from geocode column, create 2 new columns
+  rgn_cidade_data$longitude <- as.numeric(str_match(rgn_cidade_data$geocoded_hospital_address, "POINT \\((-?\\d+\\.\\d+)")[,2])
+  rgn_cidade_data$latitude <- as.numeric(str_match(rgn_cidade_data$geocoded_hospital_address, " (-?\\d+\\.\\d+)\\)$")[,2])
+  #drop geocode column
+  rgn_cidade_data$geocoded_hospital_address <- NULL
+  
+  #Inspect cleaned tibble
+  skim_without_charts(rgn_cidade_data)
+  # Write data to new file
+  write.csv(rgn_cidade_data, "rgn_cidade_data.csv", row.names = FALSE)

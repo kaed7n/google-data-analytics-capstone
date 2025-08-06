@@ -1,0 +1,6 @@
+*.csv filter=lfs diff=lfs merge=lfs -text
+*.Rproj* filter=lfs diff=lfs merge=lfs -text
+*.Rhistory filter=lfs diff=lfs merge=lfs -text
+*.twbx filter=lfs diff=lfs merge=lfs -text
+*.Rdata filter=lfs diff=lfs merge=lfs -text
+*.RData filter=lfs diff=lfs merge=lfs -text
